@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from Shema import Blog
-
+from database import create_db_and_tables
 app = FastAPI()
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
 
 # Simple blog management API
 @app.get("/all-blogs/")
