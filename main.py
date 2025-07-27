@@ -1,13 +1,17 @@
 from fastapi import FastAPI
 from Shema import Blog
 from database import create_db_and_models
+from contextlib import asynccontextmanager
 
-
-app = FastAPI()
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("📦 STARTUP: Connecting to DB")
     create_db_and_models()
+    yield
+    print("🧹 SHUTDOWN: Closing DB connection")
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Simple blog management API
 @app.get("/all-blogs/")
