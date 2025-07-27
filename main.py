@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from Shema import Blog
-from database import create_db_and_models
+from database import create_db_and_models, engine
 from contextlib import asynccontextmanager
+from sqlmodel import Session, select
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,30 +17,48 @@ app = FastAPI(lifespan=lifespan)
 # Simple blog management API
 @app.get("/all-blogs/")
 def get_blogs():
-	return {"data": "Those are all the blogs"}
+	with Session(engine) as session:
+		return session.exec(select(Blog)).all()
 
 @app.get("/blog/{id}")
 def get_blog(id: int):
-	return {"data": f"This is blog with id {id}"}
+	with Session(engine) as session:
+		blog =  session.exec(select(Blog).where(Blog.id == id)).first()
+		if not blog:
+			raise HTTPException(status_code=404, detail="Blog not found")
+		return blog
 
-@app.post("/blog/")
+@app.post("/blog/", response_model=Blog)
 def create_blog(blog: Blog):
-	return {"title": blog.title, "Content": blog.content}
+	blog = Blog(title = blog.title, content= blog.content)
+	with Session(engine) as session:
+		session.add(blog)
+		session.commit()
+		session.refresh(blog)
+		return blog
 
-@app.put("blog/{id}")
-def update_blog(id: int, blog: Blog):
-	return {"id": id, "title": blog.title, "content": blog.content}
+@app.put("/blog/")
+def update_blog(blog: Blog):
+	with Session(engine) as session:
+		blog_db = session.exec(select(Blog).where(Blog.id == blog.id)).first()
+		if not blog:
+			raise HTTPException(status_code = 404, detail="Blog not found")
+		
+		blog_db.title = blog.title
+		blog_db.content = blog.content
+
+		session.add(blog_db)
+		session.commit()
+		session.refresh(blog_db)
+
+		return blog_db
 
 @app.delete("/blog/{id}")
 def delete_blog(id: int):
-	return {"message": f"Blog with id {id} has been deleted"}
-
-@app.patch("/blog/{id}")
-def patch_blog(id: int, blog: Blog):
-	return {"id": id, "title": blog.title, "content": blog.content}
-
-
-# Comments related to blogs API
-@app.get("/blog/{id}/comments")
-def get_blog_comments(id: int):
-	return {"data": f"These are comments for blog with id {id}"}
+	with Session(engine) as session:
+		blog = session.exec(select(Blog).where(Blog.id == id)).first()
+		if not blog:
+			raise HTTPException(status_code=404, detail="Blog not found")
+		session.delete(blog)
+		session.commit()
+		return {"detail": f"Blog with id {id} deleted successfully"}
